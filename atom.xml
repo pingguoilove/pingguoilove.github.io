@@ -1,0 +1,278 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+
+  <title><![CDATA[张小军在奋斗]]></title>
+  <link href="http://pingguoilove.github.io/atom.xml" rel="self"/>
+  <link href="http://pingguoilove.github.io/"/>
+  <updated>2014-06-19T10:53:42+08:00</updated>
+  <id>http://pingguoilove.github.io/</id>
+  <author>
+    <name><![CDATA[张小军]]></name>
+    <email><![CDATA[zhangjun0806@gmail.com]]></email>
+  </author>
+  <generator uri="http://octopress.org/">Octopress</generator>
+
+  
+  <entry>
+    <title type="html"><![CDATA[在glassfish服务器中配置连接时故障转移(Oracle RAC)]]></title>
+    <link href="http://pingguoilove.github.io/blog/2014/01/20/zai-glassfishfu-wu-qi-zhong-pei-zhi-lian-jie-shi-gu-zhang-zhuan-yi-oracle-rac/"/>
+    <updated>2014-01-20T10:49:00+08:00</updated>
+    <id>http://pingguoilove.github.io/blog/2014/01/20/zai-glassfishfu-wu-qi-zhong-pei-zhi-lian-jie-shi-gu-zhang-zhuan-yi-oracle-rac</id>
+    <content type="html"><![CDATA[<p>本文主要介绍如何在<strong><em>Glassfish server</em></strong>中为应用程序配置<strong>连接时故障转移</strong>(<em>Connection-Time Failover</em>)和<strong>负载均衡</strong>（<em>load balancing</em>）数据源.本文是翻译了Oracle的文档，<a href="http://docs.oracle.com/cd/E24329_01/web.1211/e24367/connecttime.htm">点此阅读</a>原文，该文档只讲解如何配置故障转移和负载均衡，不作Oracle RAC相关技术及概念讲解，相关技术及概念了解请查看本文最后一节<strong><span style="color: #339966;"> 继续学习</span></strong>。</p>
+
+<!-- more -->
+
+<h2 id="span-stylecolor-339966span"><strong><span style="color: #339966;">目录</span></strong></h2>
+
+<p><strong><span style="color: #339966;"> 1、<a href="#使用连接时故障转移数据源">使用连接时故障转移数据源</a></span></strong><br />
+<strong><span style="color: #339966;"> 2、<a href="#连接时故障转移及负载均衡配置的属性">连接时故障转移及负载均衡配置的属性</a></span></strong><br />
+<strong><span style="color: #339966;"> 3、<a href="#配置示例代码">配置示例代码</a></span></strong><br />
+<strong><span style="color: #339966;"> 4、<a href="#继续学习">继续学习</a></span></strong> <br />
+<strong><span style="color: #339966;"> 5、<a href="#References">References</a></span></strong> </p>
+
+<h2 id="span-stylecolor-339966span-1"><strong><span style="color: #339966;">正文</span></strong></h2>
+
+<h3 id="a-namespan-stylecolor-3399661spana"><a name="使用连接时故障转移数据源"><strong><span style="color: #339966;">1、使用连接时故障转移数据源</span></strong></a></h3>
+
+<p>为了使<strong><em>Glassfish server</em></strong>能够通过配置了连接时故障转移和负载均衡的数据源连接上多个<strong><em>Oracle RAC</em></strong>节点，我们需要使用<strong><em>Oracle Thin</em></strong>驱动程序配置一个能够连接上每个<strong><em>Oracle RAC</em></strong>节点的JDBC数据源。如后面章节中的描述，下图显示了系统概述：<br />
+<a href="http://docs.oracle.com/cd/E24329_01/web.1211/e24367/connecttime.htm"><img src="http://farm8.staticflickr.com/7425/12045136173_9334963a38.jpg" width="452" height="500" alt="jdbc_oracle_rac_single_pool" /></a></p>
+
+<p>你可以通过<strong><em>Administration Console</em></strong>或者其它任何你喜欢的方法进行配置，例如<strong><em>Netbeans</em></strong>向导，<strong><em>JMX</em></strong>程序等等。</p>
+
+<p>当连接在数据源中创建好后，剩下的就由<strong><em>Oracle Thin driver</em></strong>来决定某个请求具体连接哪个<strong><em>Oracle RAC</em></strong>节点的实例来提供服务。当一个应用程序在获取数据库连接的时候，它会遍历<strong><em>JNDI tree</em></strong>并且从数据源中请求获得一个连接。数据源会从连接池中分配一个可用连接给该应用程序。</p>
+
+<p>下面的章节描述了如何配置一个使用<strong><em>Oracle RAC</em></strong>的连接时故障转移特性来处理连接故障。在这种配置下，一些连接失败的情况的故障转移时间是TCP请求超时的时间，也就是几分钟，具体视你的环境配置。</p>
+
+<h3 id="a-namespan-stylecolor-3399662spana"><a name="连接时故障转移及负载均衡配置的属性"><strong><span style="color: #339966;">2、连接时故障转移及负载均衡配置的属性</span></strong></a></h3>
+
+<p>为了在你的<strong><em>Glassfish Server</em></strong>域中配置具有故障转移和负载均衡特性的JDBC数据源，你需要配置一下一些属性：</p>
+
+<ul>
+  <li><strong><em>Oracle JDBC Thin Driver 11g</em></strong>配置连接时故障转移，例如:  </li>
+</ul>
+
+<div class="bogus-wrapper"><notextile><figure class="code"><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class="line-number">1</span>
+<span class="line-number">2</span>
+<span class="line-number">3</span>
+<span class="line-number">4</span>
+<span class="line-number">5</span>
+</pre></td><td class="code"><pre><code class="xml"><span class="line"><span class="nt">&lt;url&gt;</span>jdbc:oracle:thin:@(DESCRIPTION=(ADDRESS_LIST=(ADDRESS=
+</span><span class="line">    (PROTOCOL=TCP)(HOST=lcqsol24)(PORT=1521))(ADDRESS=(PROTOCOL=TCP)
+</span><span class="line">    (HOST=lcqsol25)(PORT=1521))(FAILOVER=on)(LOAD_BALANCE=off))
+</span><span class="line">    (CONNECT_DATA=(SERVER=DEDICATED)(SERVICE_NAME=snrac)))<span class="nt">&lt;/url&gt;</span>
+</span><span class="line"><span class="nt">&lt;driver-name&gt;</span>oracle.jdbc.OracleDriver<span class="nt">&lt;/driver-name&gt;</span>
+</span></code></pre></td></tr></table></div></figure></notextile></div>
+
+<ul>
+  <li>ConnectionReserveTimeoutSeconds=”120”
+    <ul>
+      <li>启用当应用程序在获得可用数据库连接前等待120秒的设置。</li>
+    </ul>
+  </li>
+  <li>TestConnectionsOnReserve=”true”
+    <ul>
+      <li>启用数当应用程序在尝试从数据源获取一个可用数据库连接的时候进行测试连接是否可连接。更多细节请参考<a href="http://docs.oracle.com/cd/E24329_01/web.1211/e24367/jdbc_multidatasources.htm#i1111273">测试储备连接以启用故障转移</a>。</li>
+      <li>请求启用故障转移到其它<strong><em>Oracle RAC</em></strong>节点。</li>
+    </ul>
+  </li>
+  <li>TestTableName=”name_of_small_table” 
+    <ul>
+      <li>用来测试数据库连接的物理数据库表名称。更多细节请参考<a href="http://docs.oracle.com/cd/E24329_01/web.1211/e24367/ds_tuning.htm#i1195917">数据源连接测试相关选项</a>.</li>
+    </ul>
+  </li>
+</ul>
+
+<h3 id="a-namespan-stylecolor-3399663spana"><a name="配置示例代码"><strong><span style="color: #339966;">3、配置示例代码</span></strong></a></h3>
+
+<p>以下是配置示例代码（<em><span style="color: #339966;">注:为了增加可读性，插入了一些换行符</span></em>）：</p>
+
+<div class="bogus-wrapper"><notextile><figure class="code"><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class="line-number">1</span>
+<span class="line-number">2</span>
+<span class="line-number">3</span>
+<span class="line-number">4</span>
+<span class="line-number">5</span>
+<span class="line-number">6</span>
+<span class="line-number">7</span>
+<span class="line-number">8</span>
+<span class="line-number">9</span>
+<span class="line-number">10</span>
+<span class="line-number">11</span>
+<span class="line-number">12</span>
+<span class="line-number">13</span>
+<span class="line-number">14</span>
+<span class="line-number">15</span>
+<span class="line-number">16</span>
+<span class="line-number">17</span>
+<span class="line-number">18</span>
+<span class="line-number">19</span>
+<span class="line-number">20</span>
+<span class="line-number">21</span>
+<span class="line-number">22</span>
+<span class="line-number">23</span>
+<span class="line-number">24</span>
+<span class="line-number">25</span>
+<span class="line-number">26</span>
+<span class="line-number">27</span>
+<span class="line-number">28</span>
+<span class="line-number">29</span>
+<span class="line-number">30</span>
+<span class="line-number">31</span>
+<span class="line-number">32</span>
+<span class="line-number">33</span>
+</pre></td><td class="code"><pre><code class="xml"><span class="line"><span class="nt">&lt;jdbc-data-source</span> <span class="na">xmlns=</span><span class="s">&quot;http://xmlns.oracle.com/weblogic/jdbc-data-source&quot;</span>
+</span><span class="line">  <span class="na">xmlns:sec=</span><span class="s">&quot;http://xmlns.oracle.com/weblogic/security&quot;</span>
+</span><span class="line">  <span class="na">xmlns:xsi=</span><span class="s">&quot;http://www.w3.org/2001/XMLSchema-instance&quot;</span>
+</span><span class="line">  <span class="na">xmlns:wls=</span><span class="s">&quot;http://xmlns.oracle.com/weblogic&quot;</span>
+</span><span class="line">  <span class="na">xsi:schemaLocation=</span><span class="s">&quot;http://xmlns.oracle.com/weblogic/domain/1.0/domain.xsd&quot;</span><span class="nt">&gt;</span>
+</span><span class="line">  <span class="nt">&lt;name&gt;</span>oracleRACNonXAPool<span class="nt">&lt;/name&gt;</span>
+</span><span class="line">  <span class="nt">&lt;jdbc-driver-params&gt;</span>
+</span><span class="line">    <span class="nt">&lt;url&gt;</span>jdbc:oracle:thin:@(DESCRIPTION=
+</span><span class="line">         (ADDRESS_LIST=(ADDRESS=(PROTOCOL=TCP)
+</span><span class="line">         HOST=lcqsol24)(PORT=1521))(ADDRESS=(PROTOCOL=TCP)
+</span><span class="line">         (HOST=lcqsol25)(PORT=152))(FAILOVER=on)
+</span><span class="line">         (LOAD_BALANCE=off))(CONNECT_DATA=(SERVER=DEDICATED)
+</span><span class="line">         (SERVICE_NAME=snrac)))<span class="nt">&lt;/url&gt;</span>
+</span><span class="line">    <span class="nt">&lt;driver-name&gt;</span>oracle.jdbc.OracleDriver<span class="nt">&lt;/driver-name&gt;</span>
+</span><span class="line">    <span class="nt">&lt;properties&gt;</span>
+</span><span class="line">      <span class="nt">&lt;property&gt;</span>
+</span><span class="line">        <span class="nt">&lt;name&gt;</span>user<span class="nt">&lt;/name&gt;</span>
+</span><span class="line">        <span class="nt">&lt;value&gt;</span>wlsqa<span class="nt">&lt;/value&gt;</span>
+</span><span class="line">      <span class="nt">&lt;/property&gt;</span>
+</span><span class="line">    <span class="nt">&lt;/properties&gt;</span>
+</span><span class="line">    <span class="nt">&lt;password-encrypted&gt;</span>{3DES}aP/xScCS8uI=<span class="nt">&lt;/password-encrypted&gt;</span>
+</span><span class="line">  <span class="nt">&lt;/jdbc-driver-params&gt;</span>
+</span><span class="line">  <span class="nt">&lt;jdbc-connection-pool-params&gt;</span>
+</span><span class="line">    <span class="nt">&lt;test-connections-on-reserve&gt;</span>true<span class="nt">&lt;/test-connections-on-reserve&gt;</span>
+</span><span class="line">    <span class="nt">&lt;test-table-name&gt;</span>SQL SELECT 1 FROM DUAL<span class="nt">&lt;/test-table-name&gt;</span>
+</span><span class="line">    <span class="nt">&lt;profile-type&gt;</span>4<span class="nt">&lt;/profile-type&gt;</span>
+</span><span class="line">  <span class="nt">&lt;/jdbc-connection-pool-params&gt;</span>
+</span><span class="line">  <span class="nt">&lt;jdbc-data-source-params&gt;</span>
+</span><span class="line">    <span class="nt">&lt;jndi-name&gt;</span>oracleRACJndiName<span class="nt">&lt;/jndi-name&gt;</span>
+</span><span class="line">    <span class="nt">&lt;global-transactions-protocol&gt;</span>OnePhaseCommit
+</span><span class="line">         <span class="nt">&lt;/global-transactions-protocol&gt;</span>
+</span><span class="line">  <span class="nt">&lt;/jdbc-data-source-params&gt;</span>
+</span><span class="line"><span class="nt">&lt;/jdbc-data-source&gt;</span>
+</span></code></pre></td></tr></table></div></figure></notextile></div>
+
+<h2 id="a-namereferencesspan-stylecolor-339966-4spana"><a name="References"><strong><span style="color: #339966;"> 4、继续学习</span></strong></a></h2>
+
+<ol>
+  <li><a href="http://blog.csdn.net/dengwei4321/article/details/16849395">Oracle Rac 介绍</a> 此文的内容介绍了Oracle RAC相关的概念以及优劣势分析。</li>
+</ol>
+
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[hello github pages]]></title>
+    <link href="http://pingguoilove.github.io/blog/2014/01/16/hello-github-pages/"/>
+    <updated>2014-01-16T20:41:02+08:00</updated>
+    <id>http://pingguoilove.github.io/blog/2014/01/16/hello-github-pages</id>
+    <content type="html"><![CDATA[<p>前端时间一直在捣腾openshift(<a href="https://www.openshift.com">OpenShift</a>是来自Red Hat的平台及服务的云计算平台),但是openshift被GFW墙掉了，果断放弃。其实在10月份的时候就看到了<a href="http://beyondvincent.com/">破船</a>的《<a href="http://beyondvincent.com/blog/2013/08/03/108-creating-a-github-blog-using-octopress/">利用Octopress搭建一个Github博客</a>》（不得不惊叹破船大哥是个高产的bloger，几个月不见博客数量蹭蹭蹭地涨，是广大技术宅男学习的榜样）,当时我的本本装的是OSX 10.7，不知道为什么一直装不上rbenv，当时项目紧张，就不得不放弃了。最近回到大本营，除了学习基本上没什么事情做，本本的系统也升级到10.9，就决定再试试在Github上搭建自己的博客。
+   <!-- more -->
+   搭建Github博客主要有以下几点好处：  </p>
+
+<blockquote>
+  <ol>
+    <li>Github空间免费，稳定快速，无流量限制。 </li>
+    <li>离线写作，“像写程序一样写博客”。  </li>
+    <li>编写博客使用Markdown，简单易学。  </li>
+    <li>提交博客使用命令行可以进一步学习git知识。</li>
+    <li>多人协作撰写。 </li>
+  </ol>
+</blockquote>
+
+<h3 id="section">摘要</h3>
+<ul>
+  <li>安装Octopress</li>
+  <li>配置Octopress</li>
+  <li>配置Github Pages</li>
+  <li>预览博客开发环境效果</li>
+  <li>部署博客到Github</li>
+  <li>在开发环境创建新博文并部署到Github</li>
+  <li>为Github Pages添加一个自己的域名</li>
+</ul>
+
+<h3 id="section-1">环境</h3>
+<p><em>ruby 2.0.0p247</em>, <em>MAC OSX 10.9</em>, <em>Mou</em></p>
+
+<h3 id="section-2">安装步骤</h3>
+<ol>
+  <li>
+    <p>安装Ruby，安装Octopress，配置Octopress请参见破船的《<a href="http://beyondvincent.com/blog/2013/08/03/108-creating-a-github-blog-using-octopress/">利用Octopress搭建一个Github博客</a>》。</p>
+  </li>
+  <li>
+    <p>配置Github Pages。</p>
+
+    <ul>
+      <li>
+        <p>要创建组织主页（Org Pages）或个人主页（User），首先你需要创建一个名称为username.github.io 或者orgname.github.io的代码仓库。username或者orgname必须为github的用户名，否则无法生产页面。</p>
+      </li>
+      <li>
+        <p>当名称为username.github.io 或者orgname.github.io的代码仓库创建好后，使用Automic Page Generator生成页面。请参考<a href="http://tech.marsw.tw/blog/2012/11/24/setup-octopress-on-windows-from-zero-to-1">此文</a>。</p>
+      </li>
+      <li>
+        <p>代码仓库创建好后，需要生成和配置SSH key，否则，在使用git相关命令与远程代码仓库交互的时候有可能会报Error:Permission xxx之类的错误（很不幸，我遇到了）。生成和配置SSH Key请参考<a href="https://help.github.com/articles/generating-ssh-keys">GitHub Help</a> 注意：请确保执行了ssh-keygen和ssh-add。</p>
+      </li>
+    </ul>
+  </li>
+  <li>
+    <p>预览博客效果可以运行。</p>
+
+    <p>rake preview<br />
+然后在浏览器中输入localhost:4000查看效果。</p>
+  </li>
+  <li>
+    <p>部署博客到Github也请参考破船的《<a href="http://beyondvincent.com/blog/2013/08/03/108-creating-a-github-blog-using-octopress/">利用Octopress搭建一个Github博客</a>》。</p>
+
+    <ul>
+      <li>在我运行 rake deploy的时候，提交失败，当前分支不是的版本不是最新的，解决方法请参考<a href="http://yeesterbunny.github.io/blog/2013/08/21/what-i-learned-from-hosting-octopress-on-github/">此文</a>。</li>
+      <li>在执行更新当前分支的命令的时候(git pull origin master)，会提示index.html有冲突，请可以使用(git mergetool)命令打开一个GUI工具来解决冲突。参考SO上面的<a href="http://stackoverflow.com/questions/161813/how-do-i-fix-merge-conflicts-in-git">这个问题</a>。</li>
+      <li>当rake deploy成功后，使用username.github.io 或者orgname.github.io访问到自己的Github Pages了。</li>
+    </ul>
+  </li>
+  <li>其余部分，均请参考破船的文章《<a href="http://beyondvincent.com/blog/2013/08/03/108-creating-a-github-blog-using-octopress/">利用Octopress搭建一个Github博客</a>》。</li>
+  <li>安装主题，<a href="http://opthemes.com/">这里</a>搜集了很多漂亮的octopress主题，安装方法也有。  </li>
+</ol>
+
+<div class="bogus-wrapper"><notextile><figure class="code"><figcaption><span>博客撰写，发布的流程基本如下了 </span></figcaption>
+<div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class="line-number">1</span>
+<span class="line-number">2</span>
+<span class="line-number">3</span>
+<span class="line-number">4</span>
+<span class="line-number">5</span>
+<span class="line-number">6</span>
+<span class="line-number">7</span>
+<span class="line-number">8</span>
+<span class="line-number">9</span>
+</pre></td><td class="code"><pre><code class=""><span class="line">rake new_post["text name"]
+</span><span class="line">编辑生成的markdown文件
+</span><span class="line">rake preview预览效果
+</span><span class="line">修改博客
+</span><span class="line">rake generate
+</span><span class="line">git add .
+</span><span class="line">git commit -am 'your commments'
+</span><span class="line">git push origin source
+</span><span class="line">rake deploy(若提示persmission问题，请用sudo rake deploy命令)</span></code></pre></td></tr></table></div></figure></notextile></div>
+
+<h3 id="section-3">总结</h3>
+<p>本文用Mou来写的，Markdown语法很不熟练，需要进一步学习Markdown语法。另外，今天学习到了很多git的知识。</p>
+
+<h3 id="section-4">接下来</h3>
+<p>接下来，首先了解一下octopress，争取把博客做得漂亮好用点，自己写作也有个好心情；然后就是就好好总结一下自己所看，所学，所写的东西，都记录到博客里，作为自己的知识库。希望能提高自己对技术的理解深度，以及写作能力。</p>
+
+<h3 id="references">References</h3>
+<ol>
+  <li><a href="http://beyondvincent.com/blog/2013/08/03/108-creating-a-github-blog-using-octopress/" target="_blank">http://beyondvincent.com/blog/2013/08/03/108-creating-a-github-blog-using-octopress/</a></li>
+  <li><a href="http://blog.devtang.com/blog/2012/02/10/setup-blog-based-on-github/" target="_blank">http://blog.devtang.com/blog/2012/02/10/setup-blog-based-on-github/</a></li>
+  <li><a href="http://www.tomordonez.com/blog/2012/06/04/creating-a-github-blog-using-octopress/" target="_blank">http://www.tomordonez.com/blog/2012/06/04/creating-a-github-blog-using-octopress/</a></li>
+  <li><a href="http://octopress.org/docs/" target="_blank">http://octopress.org/docs/</a></li>
+  <li><a href="http://tech.marsw.tw/blog/2012/11/24/setup-octopress-on-windows-from-zero-to-1" target="_blank">http://tech.marsw.tw/blog/2012/11/24/setup-octopress-on-windows-from-zero-to-1</a></li>
+  <li><a href="http://opthemes.com/" target="_blank">http://opthemes.com/</a></li>
+  <li><a href="http://tech.paulcz.net/2012/12/creating-a-github-pages-blog-with-octopress.html" title="如何从一个已有的Octopress博客开始搭建" target="_blank">http://tech.paulcz.net/2012/12/creating-a-github-pages-blog-with-octopress.html</a></li>
+</ol>
+
+]]></content>
+  </entry>
+  
+</feed>

@@ -1,0 +1,126 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+
+  <title><![CDATA[Category: Glassfish | 张小军在奋斗]]></title>
+  <link href="http://pingguoilove.github.io/blog/categories/glassfish/atom.xml" rel="self"/>
+  <link href="http://pingguoilove.github.io/"/>
+  <updated>2014-06-19T10:53:42+08:00</updated>
+  <id>http://pingguoilove.github.io/</id>
+  <author>
+    <name><![CDATA[张小军]]></name>
+    <email><![CDATA[zhangjun0806@gmail.com]]></email>
+  </author>
+  <generator uri="http://octopress.org/">Octopress</generator>
+
+  
+  <entry>
+    <title type="html"><![CDATA[在glassfish服务器中配置连接时故障转移(Oracle RAC)]]></title>
+    <link href="http://pingguoilove.github.io/blog/2014/01/20/zai-glassfishfu-wu-qi-zhong-pei-zhi-lian-jie-shi-gu-zhang-zhuan-yi-oracle-rac/"/>
+    <updated>2014-01-20T10:49:00+08:00</updated>
+    <id>http://pingguoilove.github.io/blog/2014/01/20/zai-glassfishfu-wu-qi-zhong-pei-zhi-lian-jie-shi-gu-zhang-zhuan-yi-oracle-rac</id>
+    <content type="html"><![CDATA[<p>本文主要介绍如何在<strong><em>Glassfish server</em></strong>中为应用程序配置<strong>连接时故障转移</strong>(<em>Connection-Time Failover</em>)和<strong>负载均衡</strong>（<em>load balancing</em>）数据源.本文是翻译了Oracle的文档，<a href="http://docs.oracle.com/cd/E24329_01/web.1211/e24367/connecttime.htm">点此阅读</a>原文，该文档只讲解如何配置故障转移和负载均衡，不作Oracle RAC相关技术及概念讲解，相关技术及概念了解请查看本文最后一节<strong><span style="color: #339966;"> 继续学习</span></strong>。</p>
+
+<!-- more -->
+
+<h2 id="span-stylecolor-339966span"><strong><span style="color: #339966;">目录</span></strong></h2>
+
+<p><strong><span style="color: #339966;"> 1、<a href="#使用连接时故障转移数据源">使用连接时故障转移数据源</a></span></strong><br />
+<strong><span style="color: #339966;"> 2、<a href="#连接时故障转移及负载均衡配置的属性">连接时故障转移及负载均衡配置的属性</a></span></strong><br />
+<strong><span style="color: #339966;"> 3、<a href="#配置示例代码">配置示例代码</a></span></strong><br />
+<strong><span style="color: #339966;"> 4、<a href="#继续学习">继续学习</a></span></strong> <br />
+<strong><span style="color: #339966;"> 5、<a href="#References">References</a></span></strong> </p>
+
+<h2 id="span-stylecolor-339966span-1"><strong><span style="color: #339966;">正文</span></strong></h2>
+
+<h3 id="a-namespan-stylecolor-3399661spana"><a name="使用连接时故障转移数据源"><strong><span style="color: #339966;">1、使用连接时故障转移数据源</span></strong></a></h3>
+
+<p>为了使<strong><em>Glassfish server</em></strong>能够通过配置了连接时故障转移和负载均衡的数据源连接上多个<strong><em>Oracle RAC</em></strong>节点，我们需要使用<strong><em>Oracle Thin</em></strong>驱动程序配置一个能够连接上每个<strong><em>Oracle RAC</em></strong>节点的JDBC数据源。如后面章节中的描述，下图显示了系统概述：<br />
+<a href="http://docs.oracle.com/cd/E24329_01/web.1211/e24367/connecttime.htm"><img src="http://farm8.staticflickr.com/7425/12045136173_9334963a38.jpg" width="452" height="500" alt="jdbc_oracle_rac_single_pool" /></a></p>
+
+<p>你可以通过<strong><em>Administration Console</em></strong>或者其它任何你喜欢的方法进行配置，例如<strong><em>Netbeans</em></strong>向导，<strong><em>JMX</em></strong>程序等等。</p>
+
+<p>当连接在数据源中创建好后，剩下的就由<strong><em>Oracle Thin driver</em></strong>来决定某个请求具体连接哪个<strong><em>Oracle RAC</em></strong>节点的实例来提供服务。当一个应用程序在获取数据库连接的时候，它会遍历<strong><em>JNDI tree</em></strong>并且从数据源中请求获得一个连接。数据源会从连接池中分配一个可用连接给该应用程序。</p>
+
+<p>下面的章节描述了如何配置一个使用<strong><em>Oracle RAC</em></strong>的连接时故障转移特性来处理连接故障。在这种配置下，一些连接失败的情况的故障转移时间是TCP请求超时的时间，也就是几分钟，具体视你的环境配置。</p>
+
+<h3 id="a-namespan-stylecolor-3399662spana"><a name="连接时故障转移及负载均衡配置的属性"><strong><span style="color: #339966;">2、连接时故障转移及负载均衡配置的属性</span></strong></a></h3>
+
+<p>为了在你的<strong><em>Glassfish Server</em></strong>域中配置具有故障转移和负载均衡特性的JDBC数据源，你需要配置一下一些属性：</p>
+
+<ul>
+  <li><strong><em>Oracle JDBC Thin Driver 11g</em></strong>配置连接时故障转移，例如:  </li>
+</ul>
+
+<p>```xml</p>
+<url>jdbc:oracle:thin:@(DESCRIPTION=(ADDRESS_LIST=(ADDRESS=
+    (PROTOCOL=TCP)(HOST=lcqsol24)(PORT=1521))(ADDRESS=(PROTOCOL=TCP)
+    (HOST=lcqsol25)(PORT=1521))(FAILOVER=on)(LOAD_BALANCE=off))
+    (CONNECT_DATA=(SERVER=DEDICATED)(SERVICE_NAME=snrac)))</url>
+<driver-name>oracle.jdbc.OracleDriver</driver-name>
+<p>```</p>
+
+<ul>
+  <li>ConnectionReserveTimeoutSeconds=”120”
+    <ul>
+      <li>启用当应用程序在获得可用数据库连接前等待120秒的设置。</li>
+    </ul>
+  </li>
+  <li>TestConnectionsOnReserve=”true”
+    <ul>
+      <li>启用数当应用程序在尝试从数据源获取一个可用数据库连接的时候进行测试连接是否可连接。更多细节请参考<a href="http://docs.oracle.com/cd/E24329_01/web.1211/e24367/jdbc_multidatasources.htm#i1111273">测试储备连接以启用故障转移</a>。</li>
+      <li>请求启用故障转移到其它<strong><em>Oracle RAC</em></strong>节点。</li>
+    </ul>
+  </li>
+  <li>TestTableName=”name_of_small_table” 
+    <ul>
+      <li>用来测试数据库连接的物理数据库表名称。更多细节请参考<a href="http://docs.oracle.com/cd/E24329_01/web.1211/e24367/ds_tuning.htm#i1195917">数据源连接测试相关选项</a>.</li>
+    </ul>
+  </li>
+</ul>
+
+<h3 id="a-namespan-stylecolor-3399663spana"><a name="配置示例代码"><strong><span style="color: #339966;">3、配置示例代码</span></strong></a></h3>
+
+<p>以下是配置示例代码（<em><span style="color: #339966;">注:为了增加可读性，插入了一些换行符</span></em>）：</p>
+
+<p>```xml
+<jdbc-data-source xmlns="http://xmlns.oracle.com/weblogic/jdbc-data-source" xmlns:sec="http://xmlns.oracle.com/weblogic/security" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:wls="http://xmlns.oracle.com/weblogic" xsi:schemalocation="http://xmlns.oracle.com/weblogic/domain/1.0/domain.xsd" /></p>
+<name>oracleRACNonXAPool</name>
+<jdbc-driver-params>
+    <url>jdbc:oracle:thin:@(DESCRIPTION=
+         (ADDRESS_LIST=(ADDRESS=(PROTOCOL=TCP)
+         HOST=lcqsol24)(PORT=1521))(ADDRESS=(PROTOCOL=TCP)
+         (HOST=lcqsol25)(PORT=152))(FAILOVER=on)
+         (LOAD_BALANCE=off))(CONNECT_DATA=(SERVER=DEDICATED)
+         (SERVICE_NAME=snrac)))</url> 
+    <driver-name>oracle.jdbc.OracleDriver</driver-name> 
+    <properties>
+      <property>
+        <name>user</name> 
+        <value>wlsqa</value> 
+      </property>
+    </properties>
+    <password-encrypted>{3DES}aP/xScCS8uI=</password-encrypted> 
+  </jdbc-driver-params>
+<jdbc-connection-pool-params>
+    <test-connections-on-reserve>true</test-connections-on-reserve> 
+    <test-table-name>SQL SELECT 1 FROM DUAL</test-table-name> 
+    <profile-type>4</profile-type> 
+  </jdbc-connection-pool-params>
+<jdbc-data-source-params>
+    <jndi-name>oracleRACJndiName</jndi-name> 
+    <global-transactions-protocol>OnePhaseCommit
+         </global-transactions-protocol> 
+  </jdbc-data-source-params>
+<p>&lt;/jdbc-data-source&gt; 
+```</p>
+
+<h2 id="a-namereferencesspan-stylecolor-339966-4spana"><a name="References"><strong><span style="color: #339966;"> 4、继续学习</span></strong></a></h2>
+
+<ol>
+  <li><a href="http://blog.csdn.net/dengwei4321/article/details/16849395">Oracle Rac 介绍</a> 此文的内容介绍了Oracle RAC相关的概念以及优劣势分析。</li>
+</ol>
+
+]]></content>
+  </entry>
+  
+</feed>

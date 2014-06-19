@@ -1,0 +1,335 @@
+
+<!DOCTYPE HTML>
+
+<html>
+
+<head>
+	<meta charset="utf-8">
+	<title>在glassfish服务器中配置连接时故障转移(Oracle RAC) - 张小军在奋斗</title>
+	<meta name="author" content="张小军">
+
+	
+	<meta name="description" content="在glassfish服务器中配置连接时故障转移(Oracle RAC) 本文主要介绍如何在Glassfish server中为应用程序配置连接时故障转移(Connection-Time Failover)和负载均衡（load balancing）数据源.本文是翻译了Oracle的文档， &hellip;">
+	
+
+  <!-- http://t.co/dKP3o1e -->
+  <meta name="HandheldFriendly" content="True">
+  <meta name="MobileOptimized" content="320">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+	<link href="/atom.xml" rel="alternate" title="张小军在奋斗" type="application/atom+xml">
+	
+	<link rel="canonical" href="http://pingguoilove.github.io/blog/2014/01/20/zai-glassfishfu-wu-qi-zhong-pei-zhi-lian-jie-shi-gu-zhang-zhuan-yi-oracle-rac/">
+	<link href="/favicon.png" rel="shortcut icon">
+	<link href="/stylesheets/screen.css" media="screen, projection" rel="stylesheet" type="text/css">
+	<link href="/stylesheets/font-awesome.min.css" media="screen, projection" rel="stylesheet" type="text/css">
+	<!--[if lt IE 9]><script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script><![endif]-->
+	<link href='http://fonts.googleapis.com/css?family=Open+Sans:400italic,400,700' rel='stylesheet' type='text/css'>
+	<script src="//ajax.googleapis.com/ajax/libs/jquery/1.7.2/jquery.min.js"></script>
+	<!--Fonts from Google"s Web font directory at http://google.com/webfonts -->
+<link href="http://fonts.googleapis.com/css?family=PT+Serif:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css">
+<link href="http://fonts.googleapis.com/css?family=PT+Sans:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css">
+
+  
+
+</head>
+
+
+<body>
+	<div class="container">
+		<div class="left-col">
+			<div class="intrude-less">
+			<header id="header" class="inner"><div class="profilepic">
+	
+	<img src="http://www.gravatar.com/avatar/3d98710da9e0ce07033b324e99dc8f7e?s=160" alt="Profile Picture" style="width: 160px;" />
+	
+</div>
+<hgroup>
+  <h1><a href="/">张小军在奋斗</a></h1>
+  
+    <br/>
+    <p class="subtitle">人生永远追逐着幻光，但是谁把幻光看作幻光，便沉入无底的深海。<br/>     ——臧克家</p>
+  
+</hgroup>
+
+<nav id="main-nav"><ul class="main-navigation">
+  <li><a href="/">首页</a></li>
+  <li><a href="/blog/archives">所有文章</a></li>
+</ul>
+
+</nav>
+<nav id="sub-nav">
+	<div class="social">
+		
+			<a class="email" href="mailto:zhangjun0806@gmail.com" title="Email">Email</a>
+		
+		
+		
+		
+		
+			<a class="github" href="https://github.com/pingguoilove" title="GitHub">GitHub</a>
+		
+		
+		
+		
+		
+		
+		
+		
+		
+			<a class="rss" href="/atom.xml" title="RSS">RSS</a>
+		
+	</div>
+</nav>
+</header>				
+			</div>
+		</div>	
+		<div class="mid-col">
+			
+				
+			
+			<div class="mid-col-container">
+				<div id="content" class="inner"><article class="post" itemscope itemtype="http://schema.org/BlogPosting">
+<!-- included by index -->
+
+	<h1 class="title" itemprop="name">在glassfish服务器中配置连接时故障转移(Oracle RAC)</h1>
+	<div class="entry-content" itemprop="articleBody"><p>本文主要介绍如何在<strong><em>Glassfish server</em></strong>中为应用程序配置<strong>连接时故障转移</strong>(<em>Connection-Time Failover</em>)和<strong>负载均衡</strong>（<em>load balancing</em>）数据源.本文是翻译了Oracle的文档，<a href="http://docs.oracle.com/cd/E24329_01/web.1211/e24367/connecttime.htm">点此阅读</a>原文，该文档只讲解如何配置故障转移和负载均衡，不作Oracle RAC相关技术及概念讲解，相关技术及概念了解请查看本文最后一节<strong><span style="color: #339966;"> 继续学习</span></strong>。</p>
+
+<!-- more -->
+
+<h2 id="span-stylecolor-339966span"><strong><span style="color: #339966;">目录</span></strong></h2>
+
+<p><strong><span style="color: #339966;"> 1、<a href="#使用连接时故障转移数据源">使用连接时故障转移数据源</a></span></strong><br />
+<strong><span style="color: #339966;"> 2、<a href="#连接时故障转移及负载均衡配置的属性">连接时故障转移及负载均衡配置的属性</a></span></strong><br />
+<strong><span style="color: #339966;"> 3、<a href="#配置示例代码">配置示例代码</a></span></strong><br />
+<strong><span style="color: #339966;"> 4、<a href="#继续学习">继续学习</a></span></strong> <br />
+<strong><span style="color: #339966;"> 5、<a href="#References">References</a></span></strong> </p>
+
+<h2 id="span-stylecolor-339966span-1"><strong><span style="color: #339966;">正文</span></strong></h2>
+
+<h3 id="a-namespan-stylecolor-3399661spana"><a name="使用连接时故障转移数据源"><strong><span style="color: #339966;">1、使用连接时故障转移数据源</span></strong></a></h3>
+
+<p>为了使<strong><em>Glassfish server</em></strong>能够通过配置了连接时故障转移和负载均衡的数据源连接上多个<strong><em>Oracle RAC</em></strong>节点，我们需要使用<strong><em>Oracle Thin</em></strong>驱动程序配置一个能够连接上每个<strong><em>Oracle RAC</em></strong>节点的JDBC数据源。如后面章节中的描述，下图显示了系统概述：<br />
+<a href="http://docs.oracle.com/cd/E24329_01/web.1211/e24367/connecttime.htm"><img src="http://farm8.staticflickr.com/7425/12045136173_9334963a38.jpg" width="452" height="500" alt="jdbc_oracle_rac_single_pool" /></a></p>
+
+<p>你可以通过<strong><em>Administration Console</em></strong>或者其它任何你喜欢的方法进行配置，例如<strong><em>Netbeans</em></strong>向导，<strong><em>JMX</em></strong>程序等等。</p>
+
+<p>当连接在数据源中创建好后，剩下的就由<strong><em>Oracle Thin driver</em></strong>来决定某个请求具体连接哪个<strong><em>Oracle RAC</em></strong>节点的实例来提供服务。当一个应用程序在获取数据库连接的时候，它会遍历<strong><em>JNDI tree</em></strong>并且从数据源中请求获得一个连接。数据源会从连接池中分配一个可用连接给该应用程序。</p>
+
+<p>下面的章节描述了如何配置一个使用<strong><em>Oracle RAC</em></strong>的连接时故障转移特性来处理连接故障。在这种配置下，一些连接失败的情况的故障转移时间是TCP请求超时的时间，也就是几分钟，具体视你的环境配置。</p>
+
+<h3 id="a-namespan-stylecolor-3399662spana"><a name="连接时故障转移及负载均衡配置的属性"><strong><span style="color: #339966;">2、连接时故障转移及负载均衡配置的属性</span></strong></a></h3>
+
+<p>为了在你的<strong><em>Glassfish Server</em></strong>域中配置具有故障转移和负载均衡特性的JDBC数据源，你需要配置一下一些属性：</p>
+
+<ul>
+  <li><strong><em>Oracle JDBC Thin Driver 11g</em></strong>配置连接时故障转移，例如:  </li>
+</ul>
+
+<div class="bogus-wrapper"><notextile><figure class="code"><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class="line-number">1</span>
+<span class="line-number">2</span>
+<span class="line-number">3</span>
+<span class="line-number">4</span>
+<span class="line-number">5</span>
+</pre></td><td class="code"><pre><code class="xml"><span class="line"><span class="nt">&lt;url&gt;</span>jdbc:oracle:thin:@(DESCRIPTION=(ADDRESS_LIST=(ADDRESS=
+</span><span class="line">    (PROTOCOL=TCP)(HOST=lcqsol24)(PORT=1521))(ADDRESS=(PROTOCOL=TCP)
+</span><span class="line">    (HOST=lcqsol25)(PORT=1521))(FAILOVER=on)(LOAD_BALANCE=off))
+</span><span class="line">    (CONNECT_DATA=(SERVER=DEDICATED)(SERVICE_NAME=snrac)))<span class="nt">&lt;/url&gt;</span>
+</span><span class="line"><span class="nt">&lt;driver-name&gt;</span>oracle.jdbc.OracleDriver<span class="nt">&lt;/driver-name&gt;</span>
+</span></code></pre></td></tr></table></div></figure></notextile></div>
+
+<ul>
+  <li>ConnectionReserveTimeoutSeconds=”120”
+    <ul>
+      <li>启用当应用程序在获得可用数据库连接前等待120秒的设置。</li>
+    </ul>
+  </li>
+  <li>TestConnectionsOnReserve=”true”
+    <ul>
+      <li>启用数当应用程序在尝试从数据源获取一个可用数据库连接的时候进行测试连接是否可连接。更多细节请参考<a href="http://docs.oracle.com/cd/E24329_01/web.1211/e24367/jdbc_multidatasources.htm#i1111273">测试储备连接以启用故障转移</a>。</li>
+      <li>请求启用故障转移到其它<strong><em>Oracle RAC</em></strong>节点。</li>
+    </ul>
+  </li>
+  <li>TestTableName=”name_of_small_table” 
+    <ul>
+      <li>用来测试数据库连接的物理数据库表名称。更多细节请参考<a href="http://docs.oracle.com/cd/E24329_01/web.1211/e24367/ds_tuning.htm#i1195917">数据源连接测试相关选项</a>.</li>
+    </ul>
+  </li>
+</ul>
+
+<h3 id="a-namespan-stylecolor-3399663spana"><a name="配置示例代码"><strong><span style="color: #339966;">3、配置示例代码</span></strong></a></h3>
+
+<p>以下是配置示例代码（<em><span style="color: #339966;">注:为了增加可读性，插入了一些换行符</span></em>）：</p>
+
+<div class="bogus-wrapper"><notextile><figure class="code"><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class="line-number">1</span>
+<span class="line-number">2</span>
+<span class="line-number">3</span>
+<span class="line-number">4</span>
+<span class="line-number">5</span>
+<span class="line-number">6</span>
+<span class="line-number">7</span>
+<span class="line-number">8</span>
+<span class="line-number">9</span>
+<span class="line-number">10</span>
+<span class="line-number">11</span>
+<span class="line-number">12</span>
+<span class="line-number">13</span>
+<span class="line-number">14</span>
+<span class="line-number">15</span>
+<span class="line-number">16</span>
+<span class="line-number">17</span>
+<span class="line-number">18</span>
+<span class="line-number">19</span>
+<span class="line-number">20</span>
+<span class="line-number">21</span>
+<span class="line-number">22</span>
+<span class="line-number">23</span>
+<span class="line-number">24</span>
+<span class="line-number">25</span>
+<span class="line-number">26</span>
+<span class="line-number">27</span>
+<span class="line-number">28</span>
+<span class="line-number">29</span>
+<span class="line-number">30</span>
+<span class="line-number">31</span>
+<span class="line-number">32</span>
+<span class="line-number">33</span>
+</pre></td><td class="code"><pre><code class="xml"><span class="line"><span class="nt">&lt;jdbc-data-source</span> <span class="na">xmlns=</span><span class="s">&quot;http://xmlns.oracle.com/weblogic/jdbc-data-source&quot;</span>
+</span><span class="line">  <span class="na">xmlns:sec=</span><span class="s">&quot;http://xmlns.oracle.com/weblogic/security&quot;</span>
+</span><span class="line">  <span class="na">xmlns:xsi=</span><span class="s">&quot;http://www.w3.org/2001/XMLSchema-instance&quot;</span>
+</span><span class="line">  <span class="na">xmlns:wls=</span><span class="s">&quot;http://xmlns.oracle.com/weblogic&quot;</span>
+</span><span class="line">  <span class="na">xsi:schemaLocation=</span><span class="s">&quot;http://xmlns.oracle.com/weblogic/domain/1.0/domain.xsd&quot;</span><span class="nt">&gt;</span>
+</span><span class="line">  <span class="nt">&lt;name&gt;</span>oracleRACNonXAPool<span class="nt">&lt;/name&gt;</span>
+</span><span class="line">  <span class="nt">&lt;jdbc-driver-params&gt;</span>
+</span><span class="line">    <span class="nt">&lt;url&gt;</span>jdbc:oracle:thin:@(DESCRIPTION=
+</span><span class="line">         (ADDRESS_LIST=(ADDRESS=(PROTOCOL=TCP)
+</span><span class="line">         HOST=lcqsol24)(PORT=1521))(ADDRESS=(PROTOCOL=TCP)
+</span><span class="line">         (HOST=lcqsol25)(PORT=152))(FAILOVER=on)
+</span><span class="line">         (LOAD_BALANCE=off))(CONNECT_DATA=(SERVER=DEDICATED)
+</span><span class="line">         (SERVICE_NAME=snrac)))<span class="nt">&lt;/url&gt;</span>
+</span><span class="line">    <span class="nt">&lt;driver-name&gt;</span>oracle.jdbc.OracleDriver<span class="nt">&lt;/driver-name&gt;</span>
+</span><span class="line">    <span class="nt">&lt;properties&gt;</span>
+</span><span class="line">      <span class="nt">&lt;property&gt;</span>
+</span><span class="line">        <span class="nt">&lt;name&gt;</span>user<span class="nt">&lt;/name&gt;</span>
+</span><span class="line">        <span class="nt">&lt;value&gt;</span>wlsqa<span class="nt">&lt;/value&gt;</span>
+</span><span class="line">      <span class="nt">&lt;/property&gt;</span>
+</span><span class="line">    <span class="nt">&lt;/properties&gt;</span>
+</span><span class="line">    <span class="nt">&lt;password-encrypted&gt;</span>{3DES}aP/xScCS8uI=<span class="nt">&lt;/password-encrypted&gt;</span>
+</span><span class="line">  <span class="nt">&lt;/jdbc-driver-params&gt;</span>
+</span><span class="line">  <span class="nt">&lt;jdbc-connection-pool-params&gt;</span>
+</span><span class="line">    <span class="nt">&lt;test-connections-on-reserve&gt;</span>true<span class="nt">&lt;/test-connections-on-reserve&gt;</span>
+</span><span class="line">    <span class="nt">&lt;test-table-name&gt;</span>SQL SELECT 1 FROM DUAL<span class="nt">&lt;/test-table-name&gt;</span>
+</span><span class="line">    <span class="nt">&lt;profile-type&gt;</span>4<span class="nt">&lt;/profile-type&gt;</span>
+</span><span class="line">  <span class="nt">&lt;/jdbc-connection-pool-params&gt;</span>
+</span><span class="line">  <span class="nt">&lt;jdbc-data-source-params&gt;</span>
+</span><span class="line">    <span class="nt">&lt;jndi-name&gt;</span>oracleRACJndiName<span class="nt">&lt;/jndi-name&gt;</span>
+</span><span class="line">    <span class="nt">&lt;global-transactions-protocol&gt;</span>OnePhaseCommit
+</span><span class="line">         <span class="nt">&lt;/global-transactions-protocol&gt;</span>
+</span><span class="line">  <span class="nt">&lt;/jdbc-data-source-params&gt;</span>
+</span><span class="line"><span class="nt">&lt;/jdbc-data-source&gt;</span>
+</span></code></pre></td></tr></table></div></figure></notextile></div>
+
+<h2 id="a-namereferencesspan-stylecolor-339966-4spana"><a name="References"><strong><span style="color: #339966;"> 4、继续学习</span></strong></a></h2>
+
+<ol>
+  <li><a href="http://blog.csdn.net/dengwei4321/article/details/16849395">Oracle Rac 介绍</a> 此文的内容介绍了Oracle RAC相关的概念以及优劣势分析。</li>
+</ol>
+
+</div>
+
+	<!-- add author, post date and categories-->
+	
+	<p style="font-weight: bold; position: relative; float: right;">
+        
+  
+
+<span class="byline author vcard">Posted by <span class="fn">张小军在奋斗</span></span>
+
+        
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2014-01-20T10:49:00+08:00" data-updated="true" itemprop="datePublished">Jan 20<span>th</span>, 2014</time>
+        
+
+
+	<a class='category' href='/blog/categories/glassfish/'>glassfish</a>, <a class='category' href='/blog/categories/oracle/'>oracle</a>, <a class='category' href='/blog/categories/ji-zhu/'>技术</a>, <a class='category' href='/blog/categories/fan-yi/'>翻译</a>
+
+
+
+      	</p>
+	
+
+
+
+</article>
+
+	<div class="share">
+	<div class="addthis_toolbox addthis_default_style ">
+	
+	
+	
+	
+                <!-- JiaThis Button BEGIN -->
+<div class="jiathis_style">
+	<a class="jiathis_button_qzone"></a>
+	<a class="jiathis_button_tsina"></a>
+	<a class="jiathis_button_tqq"></a>
+	<a class="jiathis_button_weixin"></a>
+	<a class="jiathis_button_renren"></a>
+	<a href="http://www.jiathis.com/share" class="jiathis jiathis_txt jtico jtico_jiathis" target="_blank"></a>
+	<a class="jiathis_counter_style"></a>
+</div>
+<script type="text/javascript" src="http://v3.jiathis.com/code/jia.js" charset="utf-8"></script>
+<!-- JiaThis Button END -->
+
+<!-- UY BEGIN -->
+
+<div id="uyan_frame"></div>
+<script type="text/javascript" src="http://v2.uyan.cc/code/uyan.js?uid=1888400"></script>
+<!-- UY END -->
+
+        
+	</div>
+</div>
+
+
+
+</div>
+			</div>
+			<footer id="footer" class="inner"><p>
+  Copyright &copy; 2014 - 张小军 -
+  <span class="credit">Powered by <a href="http://octopress.org">Octopress</a></span>
+</p>
+
+Design credit: <a href="http://shashankmehta.in/archive/2012/greyshade.html">Shashank Mehta</a></footer>
+			<script src="/javascripts/slash.js"></script>
+
+
+
+
+
+
+
+
+
+
+
+
+<script type="text/javascript">
+var _bdhmProtocol = (("https:" == document.location.protocol) ? " https://" : " http://");
+document.write(unescape("%3Cscript src='" + _bdhmProtocol + "hm.baidu.com/h.js%3F4740384c684ed9c68a0f79f280d7d623' type='text/javascript'%3E%3C/script%3E"));
+</script>
+
+		</div>
+	</div>
+</body>
+</html>
